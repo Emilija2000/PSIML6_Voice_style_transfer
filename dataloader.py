@@ -30,9 +30,9 @@ def readAudio(mp3_path):
     lowcut = 500  # Hz # Low cut for our butter bandpass filter
     highcut = 15000  # Hz # High cut for our butter bandpass filter
     
-    data = butter_bandpass_filter(data, lowcut, highcut, rate, order=1)
+    data = spectrogram.butter_bandpass_filter(data, lowcut, highcut, rate, order=1)
     
-    wav_spectrogram = pretty_spectrogram(
+    wav_spectrogram = spectrogram.pretty_spectrogram(
         data.astype("float64"),
         fft_size = 2048,
         step_size = fft_size//16,
