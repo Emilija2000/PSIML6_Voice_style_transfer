@@ -1,18 +1,19 @@
-import time
+from collections import defaultdict
+import copy
+import csv
+import matplotlib.pyplot as plt
+import numpy as np
+import os
 from os import path
 from pydub import AudioSegment
-import copy
-from collections import defaultdict
-import numpy as np
+from scipy.io import wavfile
+import spectrogram 
+import time
 import torch
-import torchaudio
 import torchvision
-import matplotlib.pyplot as plt
-import csv
-import os
 
-AAudioSegment.converter = "ffmpeg"
-torchaudio.set_audio_backend = "SoundFile"
+
+AudioSegment.converter = "ffmpeg"
 
 def readAudio(mp3_path):
     # files             
@@ -23,9 +24,23 @@ def readAudio(mp3_path):
         sound = AudioSegment.from_mp3(mp3_path)
         sound.export(dst, format="wav")
 
-    test,sr = torchaudio.load_wav(dst)
+    # read wav and convert to spectrogram
+    data,sr = wavfile.read(dst)
+    
+    lowcut = 500  # Hz # Low cut for our butter bandpass filter
+    highcut = 15000  # Hz # High cut for our butter bandpass filter
+    
+    data = butter_bandpass_filter(data, lowcut, highcut, rate, order=1)
+    
+    wav_spectrogram = pretty_spectrogram(
+        data.astype("float64"),
+        fft_size = 2048,
+        step_size = fft_size//16,
+        log = True,
+        thresh = 4,
+    )
 
-    return test, sr
+    return data, sr
 
 class AccentDataset(torch.utils.data.Dataset):
     def __init__(self, path, csv_path):
