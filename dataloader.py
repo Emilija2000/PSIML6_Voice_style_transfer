@@ -7,8 +7,8 @@ import numpy as np
 import os
 from os import path
 from pydub import AudioSegment
+import scipy.signal
 from scipy.io import wavfile
-from scipy import signal
 import time
 import torch
 import torchvision
@@ -38,7 +38,7 @@ def readAudio(mp3_path):
     #plt.plot(data)
     
     nperseg = int(sr * 0.001 * 20)
-    frequencies, times, spectrogram = signal.spectrogram(data, sr, nperseg=nperseg, window=signal.hann(nperseg))
+    frequencies, times, spectrogram = scipy.signal.spectrogram(data, sr, nperseg=nperseg, window=scipy.signal.hann(nperseg))
 
     return frequencies,times,spectrogram, sr
     
