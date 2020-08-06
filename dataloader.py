@@ -8,7 +8,6 @@ import os
 from os import path
 from pydub import AudioSegment
 from scipy.io import wavfile
-import spectrogram 
 import time
 import torch
 import torchvision
