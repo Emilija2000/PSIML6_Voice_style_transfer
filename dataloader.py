@@ -1,50 +1,40 @@
 from collections import defaultdict
 import copy
 import csv
-import librosa
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 from os import path
 from pydub import AudioSegment
 import scipy
+import scipy.signal
 from scipy.io import wavfile
 import time
 import torch
 import torchvision
+import librosa                    
+import librosa.display
+from PIL import Image
+from matplotlib import cm
+
 
 
 AudioSegment.converter = "ffmpeg"
-allowed_languages = ["arabic","dutch","english","french","german","korean","mandarin","russian","spanish"]
+allowed_genres = ["blues","classical","country","disco","hiphop","metal","pop","reggae","rock"]
 
 def readAudio(mp3_path):
     '''
-    Takes path of an .mp3 file, makes a .wav file if it
-    doesn't already exist, and returns: frequencies
-    and times (useful for plots), and required spectrogram 
-    along with the sample rate
+    Read audio file on location mp3_path using librosa and creates spectrogram
     '''
-    
-    # files             
-    dst = mp3_path[:-4] + ".wav"
+    y, sr = librosa.load(mp3_path)
+    melSpec = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=128)
+    melSpec_dB = librosa.power_to_db(melSpec, ref=np.max)
+    #librosa.display.specshow(melSpec_dB)
+    return melSpec_dB, sr
 
-    # convert mp3 to wav   
-    if not os.path.exists(dst):                                                         
-        sound = AudioSegment.from_mp3(mp3_path)
-        sound.export(dst, format="wav")
-
-    # read wav and convert to spectrogram
-    sr, data = wavfile.read(dst)
-    #plt.plot(data)
-    
-    nperseg = int(sr * 0.001 * 20)
-    frequencies, times, spectrogram = scipy.signal.spectrogram(data, sr, nperseg=nperseg, window=scipy.signal.hann(nperseg))
-
-    return frequencies,times,spectrogram, sr
-    
 def writeAudio(spectrogram, sample_rate, output_file_name):
     '''
-    For given spectrogram and sample_rate, write .wav audiofile
+    For given scipy spectrogram and sample_rate, write .wav audiofile
     with the name output_file_name + '.wav'
     '''
     audio_signal = librosa.core.spectrum.griffinlim(spectrogram)
@@ -53,31 +43,59 @@ def writeAudio(spectrogram, sample_rate, output_file_name):
     file_name = output_file_name + '.wav'
     scipy.io.wavfile.write(file_name, sample_rate, np.array(audio_signal, dtype=np.int16))
 
-class AccentDataset(torch.utils.data.Dataset):
+def readSpectrogram(png_path):
+    '''
+    Reads png file and save spectrogram as a matrix
+    '''
+    pass
+
+class MusicDataset(torch.utils.data.Dataset):
     def __init__(self, path, csv_path):
-        self.data_names = []
-        self.classes = []
-        self.encod_data = []
-
+        self.data_names = []    #mp3 file location and data label
+        self.data_names_onehot = [] #mp3 file location and onehot encoded data label
+        self.classes = [] #all classes (possible labels)
+        
+        self.data = [] #tuples - ((spectrogram,sample_rate), label) - labels are not one hot
+        
         with open(csv_path) as csvfile:
+            #start cvs reader
             csv_reader = csv.reader(csvfile,delimiter=',')
+            next(csv_reader) #skip first row
             for row in csv_reader:
-                if (row[8] == "FALSE" and row[4] in allowed_languages):
-                    mp3_path = os.path.join(path,row[3]+'.mp3')
-                    self.data_names.append((mp3_path, row[4]))
-                    if (row[4] not in self.classes):
-                        self.classes.append(row[4])
+                if (row[59] in allowed_genres): 
+                    mp3_path = os.path.join(path,row[59],row[0])
+                    self.data_names.append((mp3_path, row[59])) 
+                    if (row[59] not in self.classes):
+                        self.classes.append(row[59])
 
+            #create onehot encoding for data labels
+            i = 0
             for data in self.data_names:
-                label = torch.zeros(len(self.classes)) 
-                label[self.classes.index(data[1])] = 1
-                self.encod_data.append((data[0],label))
+                #saving just datafile names and labels as onehot
+                label_onehot = torch.zeros(len(self.classes)) 
+                label_onehot[self.classes.index(data[1])] = 1
+                self.data_names_onehot.append((data[0],label_onehot))
+                
+                #int encoding for classes
+                label = torch.argmax(label_onehot).item()
+                
+                #reading data and saving it as spectrograms and labels as int!
+                spect, sr = readAudio(data[0])
+                #reshape spectrogram to represent 1 channel
+                spect = spect[:,:1280]     
+                #spect = Image.fromarray(np.uint8(spect))        
+                #spect = torchvision.transforms.Grayscale(3)(spect)
+                spect = torch.Tensor(spect).reshape(1,spect.shape[0],spect.shape[1])
+                #save data
+                self.data.append(((spect,sr),label))
+                i +=1
+                #print
+                if i%50 == 0:
+                    print('Loading: ',i, ' items from dataset')
 
     def __getitem__(self,index):
-        freq, time, dat, s_rate = readAudio(self.data_names[index][0])
-        label = self.encod_data[index][1]
-        return (freq, time, dat), label
+        return self.data_names[index][0],self.data[index][0][0], self.data[index][1]
 
     def __len__(self):
         return len(self.data_names)
-    
+       
